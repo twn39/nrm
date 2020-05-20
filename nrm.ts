@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as npm from 'npm';
 import * as commander from 'commander';
+import * as ini from 'ini';
 
 const PKG = require('./package.json');
 const REGISTRY = require('./registries.json');
@@ -22,6 +23,11 @@ commander
     .command('ls')
     .description('Show current registry name or URL')
     .action(listRegistries);
+
+commander
+    .command('use <registry>')
+    .description('Show current registry name or URL')
+    .action(onUse);
 
 commander.parse(process.argv);
 
@@ -65,28 +71,54 @@ async function listRegistries() {
 }
 
 
-
 function getRegistries() {
 
     return new Promise((resolve, reject) => {
         fs.access(NRMRC, fs.constants.F_OK, err => {
             if (err) {
                 fs.writeFile(NRMRC, JSON.stringify(REGISTRY, null, 4), err => {
-                    if (err) {
-                        reject(err);
-                    }
+                    if (err) reject(err);
                 });
             }
 
             fs.readFile(NRMRC, 'utf8', (err, data) => {
-                if (err) {
-                    reject(err);
-                }
+                if (err) reject(err);
                 resolve(JSON.parse(data));
             });
         });
 
     })
+}
+
+async function onUse(name) {
+    const npmRCData = await getNpmRCData();
+    const npmConfig = ini.parse(npmRCData);
+    const registries = await getRegistries();
+    const selectRegistry = registries[name];
+    if (selectRegistry) {
+        npmConfig.registry = selectRegistry.registry;
+        npmConfig.home = selectRegistry.home;
+        fs.writeFileSync(NPMRC, ini.stringify(npmConfig));
+        console.log("\n");
+        console.log(`   Registry has been set to: ${npmConfig.registry}`);
+        console.log("\n");
+    }
+}
+
+function getNpmRCData() {
+    return new Promise((resolve, reject) => {
+        fs.access(NPMRC, fs.constants.F_OK, err => {
+            if (err) {
+                fs.writeFile(NPMRC, '', err => {
+                    if (err) reject(err);
+                });
+            }
+        });
+        fs.readFile(NPMRC, 'utf8', (err, data) => {
+            if (err) reject(err);
+            resolve(data);
+        });
+    });
 }
 
 
